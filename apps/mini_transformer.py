@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.nn.functional as F
 import numpy as np
 
 # Define some sample sentences (dummy dataset for quick training)
@@ -57,82 +56,88 @@ sentences = [
     "fine tuning adapts pre trained models"
 ]
 
-# Tokenization (simple)
+# Tokenization: Create a vocabulary set from the sentences
 vocab = set(word for sentence in sentences for word in sentence.split())
-vocab.add("<PAD>")  # Explicitly add a padding token
+vocab.add("<PAD>")  # Add a padding token
 vocab_size = len(vocab)
+
+# Create a mapping from words to indices and vice versa
 vocab_dict = {word: i for i, word in enumerate(vocab)}
 reverse_vocab_dict = {i: word for word, i in vocab_dict.items()}
 
-# Convert sentences to sequences
+# Convert sentences to sequences of token indices
 sequences = [[vocab_dict[word] for word in sentence.split()] for sentence in sentences]
 
 # Define hyperparameters
-embedding_dim = 32
-num_heads = 2
-hidden_dim = 64
-num_layers = 2
-max_seq_len = max(len(seq) for seq in sequences)
+embedding_dim = 32  # Size of word embeddings
+num_heads = 2  # Number of attention heads in Transformer
+hidden_dim = 64  # Hidden layer size in feedforward network
+num_layers = 2  # Number of Transformer encoder layers
+max_seq_len = max(len(seq) for seq in sequences)  # Find max sequence length for padding
 
-# Padding sequences to max length
+# Pad sequences to max length using the padding token index
 for seq in sequences:
     while len(seq) < max_seq_len:
-        seq.append(vocab_dict["<PAD>"])  # Using "." as padding token
+        seq.append(vocab_dict["<PAD>"])
 
+# Convert sequences to a PyTorch tensor
 tensor_data = torch.tensor(sequences)
+
+# Function to create positional encoding
 
 def positional_encoding(seq_len, d_model):
     """Creates a positional encoding matrix."""
-    pos = torch.arange(seq_len).unsqueeze(1)
-    div_term = torch.exp(torch.arange(0, d_model, 2) * -(np.log(10000.0) / d_model))
+    pos = torch.arange(seq_len).unsqueeze(1)  # Position indices
+    div_term = torch.exp(torch.arange(0, d_model, 2) * -(np.log(10000.0) / d_model))  # Scaling factor
     pe = torch.zeros(seq_len, d_model)
-    pe[:, 0::2] = torch.sin(pos * div_term)
-    pe[:, 1::2] = torch.cos(pos * div_term)
+    pe[:, 0::2] = torch.sin(pos * div_term)  # Apply sine to even indices
+    pe[:, 1::2] = torch.cos(pos * div_term)  # Apply cosine to odd indices
     return pe.unsqueeze(0)  # Shape: (1, seq_len, d_model)
 
+# Define a simple Transformer model class
 class MiniTransformer(nn.Module):
     def __init__(self, vocab_size, embedding_dim, num_heads, hidden_dim, num_layers, max_seq_len):
         super(MiniTransformer, self).__init__()
-        self.embedding = nn.Embedding(vocab_size, embedding_dim)
-        self.pos_encoding = positional_encoding(max_seq_len, embedding_dim)
+        self.embedding = nn.Embedding(vocab_size, embedding_dim)  # Word embedding layer
+        self.pos_encoding = positional_encoding(max_seq_len, embedding_dim)  # Positional encoding
         self.encoder_layers = nn.TransformerEncoder(
             nn.TransformerEncoderLayer(d_model=embedding_dim, nhead=num_heads, dim_feedforward=hidden_dim, dropout=0.1),
             num_layers=num_layers
         )
-        self.fc_out = nn.Linear(embedding_dim, vocab_size)
+        self.fc_out = nn.Linear(embedding_dim, vocab_size)  # Output layer for classification
 
     def forward(self, x):
-        x = self.embedding(x) + self.pos_encoding[:, :x.shape[1], :]
-        x = self.encoder_layers(x)
-        x = self.fc_out(x)
+        x = self.embedding(x) + self.pos_encoding[:, :x.shape[1], :]  # Add positional encoding
+        x = self.encoder_layers(x)  # Pass through Transformer encoder
+        x = self.fc_out(x)  # Output logits for each word in the vocabulary
         return x
 
-# Model instance
+# Instantiate model, optimizer, and loss function
 model = MiniTransformer(vocab_size, embedding_dim, num_heads, hidden_dim, num_layers, max_seq_len)
-optimizer = optim.Adam(model.parameters(), lr=0.001)
-criterion = nn.CrossEntropyLoss()
+optimizer = optim.Adam(model.parameters(), lr=0.001)  # Adam optimizer
+criterion = nn.CrossEntropyLoss()  # Loss function for classification
 
-# Training loop (simple example)
+# Training loop
 epochs = 100
 for epoch in range(epochs):
     optimizer.zero_grad()
-    output = model(tensor_data[:, :-1])  # Input sequence
+    output = model(tensor_data[:, :-1])  # Input sequence (excluding last word)
     loss = criterion(output.reshape(-1, vocab_size), tensor_data[:, 1:].reshape(-1))  # Predict next word
-    loss.backward()
-    optimizer.step()
+    loss.backward()  # Compute gradients
+    optimizer.step()  # Update model parameters
     if epoch % 10 == 0:
         print(f"Epoch {epoch}, Loss: {loss.item():.4f}")
 
-# Predict the next word based on user input
+# Function to predict the next word based on user input
 def predict_next_word(input_text):
-    tokens = [vocab_dict.get(word, 0) for word in input_text.split()]
+    tokens = [vocab_dict.get(word, 0) for word in input_text.split()]  # Tokenize input text
     tokens = torch.tensor(tokens).unsqueeze(0)  # Convert to tensor
     with torch.no_grad():
-        output = model(tokens)
-        next_word_idx = output[0, -1].argmax().item()
-        return reverse_vocab_dict[next_word_idx]
+        output = model(tokens)  # Generate model output
+        next_word_idx = output[0, -1].argmax().item()  # Get the most likely next word index
+        return reverse_vocab_dict[next_word_idx]  # Convert back to word
 
-# Example prediction
+# Interactive loop to test predictions
 while True:
     user_input = input("Enter a sentence fragment: ")
     if user_input.lower() == "exit":
