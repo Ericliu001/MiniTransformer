@@ -1,6 +1,13 @@
-import numpy as np
-import random
-from collections import defaultdict
+# ✅ Tokenization & Embeddings – Converts words to numerical representations.
+# ✅ Positional Encoding – Injects sequence order into embeddings.
+# ✅ Self-Attention Mechanism – Learns dependencies between words.
+# ✅ Training Loop – Updates embeddings based on loss.
+
+
+# 🚨 No Multi-Head Attention – GPT uses multiple attention heads to capture different relationships in text.
+# 🚨 No Masked Attention – GPT only attends to previous tokens to predict the next token.
+# 🚨 No Feed-Forward Layers – GPT stacks fully connected layers after attention.
+# 🚨 Not Autoregressive – GPT predicts one token at a time, but your model computes everything at once.
 
 # Sample dataset of 50 sentences
 import numpy as np
