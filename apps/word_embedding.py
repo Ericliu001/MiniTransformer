@@ -35,8 +35,9 @@ index_to_word = {i: word for word, i in word_to_index.items()}
 vocab_size = len(vocab)
 
 # Step 2: Initialize Embeddings (GPT-style single embedding matrix)
-embedding_dim = 50
+embedding_dim = 50  # embedding_dim (embedding dimension) is the size of the vector representation used to encode each word (or token) in a neural network. It determines how many numerical values represent a word in a high-dimensional space.
 word_embeddings = np.random.rand(vocab_size, embedding_dim) * 0.01  # Small random values
+
 
 # Step 3: Positional Encoding
 def positional_encoding(seq_length, embedding_dim):
@@ -44,11 +45,13 @@ def positional_encoding(seq_length, embedding_dim):
     for pos in range(seq_length):
         for i in range(0, embedding_dim, 2):
             pos_enc[pos, i] = np.sin(pos / (10000 ** (i / embedding_dim)))
-            pos_enc[pos, i+1] = np.cos(pos / (10000 ** (i / embedding_dim)))
+            pos_enc[pos, i + 1] = np.cos(pos / (10000 ** (i / embedding_dim)))
     return pos_enc
+
 
 max_seq_length = max(len(sentence.split()) for sentence in sentences)
 pos_encodings = positional_encoding(max_seq_length, embedding_dim)
+
 
 # Step 4: Scaled Dot-Product Attention (GPT-style Self-Attention)
 def scaled_dot_product_attention(Q, K, V):
@@ -57,6 +60,7 @@ def scaled_dot_product_attention(Q, K, V):
     scores = np.dot(Q, K.T) / np.sqrt(d_k)  # Scaled dot product
     attention_weights = np.exp(scores) / np.sum(np.exp(scores), axis=-1, keepdims=True)  # Softmax
     return np.dot(attention_weights, V)  # Output weighted sum
+
 
 # Step 5: Training Loop (Self-Attention to update embeddings)
 learning_rate = 0.01
@@ -92,6 +96,7 @@ for epoch in range(epochs):
 # Step 6: Normalize Embeddings for Similarity Calculation
 word_embeddings = word_embeddings / np.linalg.norm(word_embeddings, axis=1, keepdims=True)
 
+
 # Step 7: Find Similar Words using Cosine Similarity
 def get_similar_words(word, top_n=5):
     if word not in word_to_index:
@@ -102,6 +107,7 @@ def get_similar_words(word, top_n=5):
     sorted_indices = np.argsort(-similarities)  # Sort by highest similarity
 
     return [index_to_word[i] for i in sorted_indices[:top_n]]
+
 
 while True:
     # Example: Find words similar to "cat"
