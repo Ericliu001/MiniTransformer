@@ -4,145 +4,106 @@ from collections import defaultdict
 
 # Sample dataset of 50 sentences
 sentences = [
-    "The cat sits on the mat",
-    "The dog barks at night",
-    "Birds fly in the sky",
-    "The sun shines bright",
-    "Rain falls from the clouds",
-    "The river flows to the sea",
-    "A child plays in the park",
-    "Leaves fall in autumn",
-    "Stars twinkle at night",
-    "A book rests on the table",
-    "The moon orbits the Earth",
-    "Fish swim in the water",
-    "The wind blows strongly",
-    "Mountains rise above the land",
-    "The clock ticks every second",
-    "Snow covers the ground",
-    "Bees collect nectar from flowers",
-    "A train moves on tracks",
-    "The phone rings loudly",
-    "Clouds drift in the sky",
-    "The ocean waves crash on shore",
-    "Trees grow tall and strong",
-    "A plane flies above the clouds",
-    "The candle flickers in the dark",
-    "The bridge spans across the river",
-    "A dog wags its tail happily",
-    "People walk on the sidewalk",
-    "Music plays from the radio",
-    "A spider weaves a web",
-    "A baby laughs with joy",
-    "The butterfly flutters its wings",
-    "A fire burns in the fireplace",
-    "A squirrel gathers acorns",
-    "The stars shine in the night",
-    "A key unlocks the door",
-    "The chef cooks delicious food",
-    "A kite flies in the wind",
-    "The mirror reflects an image",
-    "The train station is busy",
-    "A clock shows the time",
-    "The artist paints a masterpiece",
-    "A cat naps on the windowsill",
-    "The bird sings in the morning",
-    "A fish jumps out of the water",
-    "A bicycle rolls down the street",
-    "The lamp lights up the room",
-    "The puppy chews on a toy",
-    "The leaves rustle in the breeze",
-    "A horse gallops across the field",
-    "A fox sneaks through the woods",
+    "The cat sits on the mat", "The dog barks at night", "Birds fly in the sky",
+    "The sun shines bright", "Rain falls from the clouds", "The river flows to the sea",
+    "A child plays in the park", "Leaves fall in autumn", "Stars twinkle at night",
+    "A book rests on the table", "The moon orbits the Earth", "Fish swim in the water",
+    "The wind blows strongly", "Mountains rise above the land", "The clock ticks every second",
+    "Snow covers the ground", "Bees collect nectar from flowers", "A train moves on tracks",
+    "The phone rings loudly", "Clouds drift in the sky", "The ocean waves crash on shore",
+    "Trees grow tall and strong", "A plane flies above the clouds", "The candle flickers in the dark",
+    "The bridge spans across the river", "A dog wags its tail happily", "People walk on the sidewalk",
+    "Music plays from the radio", "A spider weaves a web", "A baby laughs with joy",
+    "The butterfly flutters its wings", "A fire burns in the fireplace", "A squirrel gathers acorns",
+    "The stars shine in the night", "A key unlocks the door", "The chef cooks delicious food",
+    "A kite flies in the wind", "The mirror reflects an image", "The train station is busy",
+    "A clock shows the time", "The artist paints a masterpiece", "A cat naps on the windowsill",
+    "The bird sings in the morning", "A fish jumps out of the water", "A bicycle rolls down the street",
+    "The lamp lights up the room", "The puppy chews on a toy", "The leaves rustle in the breeze",
+    "A horse gallops across the field", "A fox sneaks through the woods"
 ]
 
-# Tokenization
+# Step 1: Tokenization and Vocabulary
 word_counts = defaultdict(int)
 for sentence in sentences:
     for word in sentence.lower().split():
         word_counts[word] += 1
 
-# Create word-to-index mapping
 vocab = list(word_counts.keys())
 word_to_index = {word: i for i, word in enumerate(vocab)}
 index_to_word = {i: word for word, i in word_to_index.items()}
 vocab_size = len(vocab)
 
-# Initialize Embedding Matrices
+# Step 2: Initialize Embeddings (GPT-style single embedding matrix)
 embedding_dim = 50
-embeddings = np.random.rand(vocab_size, embedding_dim) * 0.01  # Target embeddings
-context_embeddings = np.random.rand(vocab_size, embedding_dim) * 0.01  # Context embeddings
+word_embeddings = np.random.rand(vocab_size, embedding_dim) * 0.01  # Small random values
 
-# Generate Training Data (Skip-Gram)
-window_size = 2
-training_data = []
+# Step 3: Positional Encoding
+def positional_encoding(seq_length, embedding_dim):
+    pos_enc = np.zeros((seq_length, embedding_dim))
+    for pos in range(seq_length):
+        for i in range(0, embedding_dim, 2):
+            pos_enc[pos, i] = np.sin(pos / (10000 ** (i / embedding_dim)))
+            pos_enc[pos, i+1] = np.cos(pos / (10000 ** (i / embedding_dim)))
+    return pos_enc
 
-for sentence in sentences:
-    words = sentence.lower().split()
-    word_indices = [word_to_index[word] for word in words]
+max_seq_length = max(len(sentence.split()) for sentence in sentences)
+pos_encodings = positional_encoding(max_seq_length, embedding_dim)
 
-    for center_idx in range(len(word_indices)):
-        center_word = word_indices[center_idx]
-        for w in range(-window_size, window_size + 1):
-            context_idx = center_idx + w
-            if 0 <= context_idx < len(word_indices) and center_idx != context_idx:
-                training_data.append((center_word, word_indices[context_idx]))
+# Step 4: Scaled Dot-Product Attention (GPT-style Self-Attention)
+def scaled_dot_product_attention(Q, K, V):
+    """Compute attention weights and output"""
+    d_k = Q.shape[-1]
+    scores = np.dot(Q, K.T) / np.sqrt(d_k)  # Scaled dot product
+    attention_weights = np.exp(scores) / np.sum(np.exp(scores), axis=-1, keepdims=True)  # Softmax
+    return np.dot(attention_weights, V)  # Output weighted sum
 
-# Training with Gradient Descent and Negative Sampling
-def sigmoid(x):
-    return 1 / (1 + np.exp(-x))
+# Step 5: Training Loop (Self-Attention to update embeddings)
+learning_rate = 0.01
+epochs = 1000
 
-def train_skipgram(epochs=1000, learning_rate=0.01, neg_samples=5):
-    for epoch in range(epochs):
-        total_loss = 0
-        random.shuffle(training_data)
+for epoch in range(epochs):
+    total_loss = 0
+    random.shuffle(sentences)
 
-        for target, context in training_data:
-            # Positive sample
-            positive_score = sigmoid(np.dot(embeddings[target], context_embeddings[context]))
-            positive_loss = -np.log(positive_score)
+    for sentence in sentences:
+        words = sentence.lower().split()
+        token_ids = [word_to_index[word] for word in words]
 
-            # Update embeddings
-            gradient = learning_rate * (1 - positive_score)
-            embeddings[target] += gradient * context_embeddings[context]
-            context_embeddings[context] += gradient * embeddings[target]
+        # Extract embeddings & apply positional encoding
+        X = word_embeddings[token_ids] + pos_encodings[:len(token_ids)]
 
-            # Negative Sampling
-            for _ in range(neg_samples):
-                negative_word = random.randint(0, vocab_size - 1)
-                negative_score = sigmoid(np.dot(embeddings[target], context_embeddings[negative_word]))
-                negative_loss = -np.log(1 - negative_score)
+        # Apply self-attention
+        Q, K, V = X, X, X  # In GPT, Q=K=V from same input
+        attention_output = scaled_dot_product_attention(Q, K, V)
 
-                # Update for negative sample
-                gradient = learning_rate * (-negative_score)
-                embeddings[target] += gradient * context_embeddings[negative_word]
-                context_embeddings[negative_word] += gradient * embeddings[target]
+        # Compute loss (Difference between attention output and original embeddings)
+        loss = np.sum((attention_output - X) ** 2)
+        total_loss += loss
 
-            total_loss += positive_loss + (neg_samples * negative_loss)
+        # Backpropagation (Gradient update on embeddings)
+        gradients = (attention_output - X)
+        for i, token_id in enumerate(token_ids):
+            word_embeddings[token_id] -= learning_rate * gradients[i]
 
-        if epoch % 100 == 0:
-            print(f"Epoch {epoch}, Loss: {total_loss:.4f}")
+    if epoch % 100 == 0:
+        print(f"Epoch {epoch}, Loss: {total_loss:.4f}")
 
-train_skipgram()
+# Step 6: Normalize Embeddings for Similarity Calculation
+word_embeddings = word_embeddings / np.linalg.norm(word_embeddings, axis=1, keepdims=True)
 
-# Find Similar Words
+# Step 7: Find Similar Words using Cosine Similarity
 def get_similar_words(word, top_n=5):
     if word not in word_to_index:
         return "Word not in vocabulary"
 
-    word_vec = embeddings[word_to_index[word]]
-    similarities = np.dot(embeddings, word_vec) / (
-            np.linalg.norm(embeddings, axis=1) * np.linalg.norm(word_vec)
-    )
-    sorted_indices = np.argsort(-similarities)
+    word_vec = word_embeddings[word_to_index[word]]
+    similarities = np.dot(word_embeddings, word_vec)  # Compute cosine similarity
+    sorted_indices = np.argsort(-similarities)  # Sort by highest similarity
 
     return [index_to_word[i] for i in sorted_indices[:top_n]]
 
-# Example
-print("Words similar to 'cat':", get_similar_words("cat"))
-
-# Example: Find words similar to "cat"
-# Test the model
 while True:
-    user_input = input("Enter a sentence fragment: ")
-    print("Words similar to " + user_input, get_similar_words(user_input))
+    # Example: Find words similar to "cat"
+    user_input = input("Enter a word: ").lower()
+    print(f"Words similar to '{user_input}': {get_similar_words(user_input)}")
