@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
 def positional_encoding(seq_len, d_model):
     """
@@ -33,3 +34,13 @@ pos_encoding = positional_encoding(seq_length, d_model)
 print("Positional Encoding Sample (First 5 Positions):\n")
 for row in pos_encoding[:5]:
     print(row)
+
+
+# Visualizing the position encoding
+plt.figure(figsize=(10, 6))
+plt.imshow(pos_encoding, cmap="viridis", aspect="auto")
+plt.colorbar(label="Encoding Value")
+plt.xlabel("Embedding Dimension")
+plt.ylabel("Position in Sequence")
+plt.title("Positional Encoding Heatmap")
+plt.show()
