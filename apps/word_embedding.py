@@ -1,20 +1,15 @@
-# ✅ Tokenization & Embeddings – Converts words to numerical representations.
-# ✅ Positional Encoding – Injects sequence order into embeddings.
-# ✅ Self-Attention Mechanism – Learns dependencies between words.
-# ✅ Training Loop – Updates embeddings based on loss.
-
-
-# 🚨 No Multi-Head Attention – GPT uses multiple attention heads to capture different relationships in text.
-# 🚨 No Masked Attention – GPT only attends to previous tokens to predict the next token.
-# 🚨 No Feed-Forward Layers – GPT stacks fully connected layers after attention.
-# 🚨 Not Autoregressive – GPT predicts one token at a time, but your model computes everything at once.
-
-# Sample dataset of 50 sentences
 import numpy as np
 import random
 from collections import defaultdict
 
-# Expanded dataset with 100 interconnected sentences
+# =============================================================================
+# STEP 0: Prepare a Sample Dataset
+# -----------------------------------------------------------------------------
+# Here we define a list of sentences that serve as our "training" dataset.
+# Each sentence describes a scene related to the ocean. In a real model,
+# you would use a much larger and diverse dataset.
+# =============================================================================
+
 sentences = [
     "The ocean stretches endlessly beyond the horizon, where the sky meets the waves, and the ocean whispers secrets that only the wind can hear.",
     "Waves crash against the shore with relentless energy, carving the coastline over centuries, while waves retreat quietly, leaving behind stories written in the sand.",
@@ -63,124 +58,250 @@ sentences = [
     "The endless blue stretches far beyond what the eye can see, promising adventure and danger, yet the endless blue is never truly empty, filled with life unseen."
 ]
 
-# Step 1: Tokenization and Vocabulary
+# =============================================================================
+# STEP 1: Tokenization and Vocabulary Building
+# -----------------------------------------------------------------------------
+# We tokenize the sentences by splitting on spaces, convert words to lowercase,
+# and count their frequency. Then we create mappings from words to indices and
+# vice versa. This will allow us to convert words to numerical representations.
+# =============================================================================
+
 word_counts = defaultdict(int)
 for sentence in sentences:
     for word in sentence.lower().split():
         word_counts[word] += 1
 
+# Create a vocabulary list from the unique words
 vocab = list(word_counts.keys())
+
+# Create mappings between words and their corresponding indices
 word_to_index = {word: i for i, word in enumerate(vocab)}
 index_to_word = {i: word for word, i in word_to_index.items()}
+
+# Total number of unique words
 vocab_size = len(vocab)
 
-# Step 2: Initialize Embeddings
-embedding_dim = 50  # Dimension size
-word_embeddings = np.random.rand(vocab_size, embedding_dim) * 0.01  # Small random values
+# =============================================================================
+# STEP 2: Initialize Word Embeddings
+# -----------------------------------------------------------------------------
+# Each word is assigned a small random vector (embedding) of a specified dimension.
+# These embeddings will be updated during training.
+# =============================================================================
 
+embedding_dim = 50  # Size of the embedding vector for each word
+# Initialize embeddings with small random values
+word_embeddings = np.random.rand(vocab_size, embedding_dim) * 0.01
 
-# Step 3: Positional Encoding
+# =============================================================================
+# STEP 3: Positional Encoding
+# -----------------------------------------------------------------------------
+# Since the order of words in a sentence matters, we add positional information.
+# This function creates a sinusoidal positional encoding matrix.
+# =============================================================================
+
 def positional_encoding(seq_length, embedding_dim):
+    """
+    Compute sinusoidal positional encodings.
+    
+    Args:
+        seq_length (int): Maximum sequence length (number of words in a sentence).
+        embedding_dim (int): Dimension of the embeddings.
+    
+    Returns:
+        A (seq_length x embedding_dim) numpy array containing positional encodings.
+    """
     pos_enc = np.zeros((seq_length, embedding_dim))
     for pos in range(seq_length):
         for i in range(0, embedding_dim, 2):
+            # Use sine for even indices in the embedding
             pos_enc[pos, i] = np.sin(pos / (10000 ** (i / embedding_dim)))
+            # Use cosine for odd indices in the embedding
             pos_enc[pos, i + 1] = np.cos(pos / (10000 ** (i / embedding_dim)))
     return pos_enc
 
-
+# Determine the maximum sentence length in the dataset
 max_seq_length = max(len(sentence.split()) for sentence in sentences)
+# Pre-compute positional encodings for sequences up to max_seq_length
 pos_encodings = positional_encoding(max_seq_length, embedding_dim)
 
+# =============================================================================
+# STEP 4: Self-Attention Mechanism
+# -----------------------------------------------------------------------------
+# The scaled dot-product attention calculates attention weights between words
+# and produces a new representation for each word based on all words in the sentence.
+# In GPT, the same values are used for queries (Q), keys (K), and values (V).
+# =============================================================================
 
-# Step 4: Scaled Dot-Product Attention
 def scaled_dot_product_attention(Q, K, V):
+    """
+    Compute the scaled dot-product attention.
+    
+    Args:
+        Q (numpy.ndarray): Query matrix.
+        K (numpy.ndarray): Key matrix.
+        V (numpy.ndarray): Value matrix.
+        
+    Returns:
+        A tuple of:
+         - The attention output.
+         - The attention weights.
+    """
     d_k = Q.shape[-1]
+    # Compute raw attention scores and scale them
     scores = np.dot(Q, K.T) / np.sqrt(d_k)
-    attention_weights = np.exp(scores) / np.sum(np.exp(scores), axis=-1, keepdims=True)  # Softmax
+    # Apply softmax to obtain normalized attention weights
+    attention_weights = np.exp(scores) / np.sum(np.exp(scores), axis=-1, keepdims=True)
+    # Multiply weights by V to get the final attention output
     return np.dot(attention_weights, V), attention_weights
 
+# =============================================================================
+# Helper Functions for Loss and Encoding
+# -----------------------------------------------------------------------------
 
-# Cross-Entropy Loss Function
 def cross_entropy_loss(y_true, y_pred):
-    return -np.sum(y_true * np.log(y_pred + 1e-9))  # Small value to prevent log(0)
+    """
+    Compute cross-entropy loss.
+    
+    Args:
+        y_true (numpy.ndarray): True one-hot encoded labels.
+        y_pred (numpy.ndarray): Predicted probabilities.
+        
+    Returns:
+        Scalar loss value.
+    """
+    # Add a small constant to prevent taking the log of 0
+    return -np.sum(y_true * np.log(y_pred + 1e-9))
 
-
-# One-hot encoding function
 def one_hot_encoding(indices, vocab_size):
+    """
+    Convert a list of indices into one-hot encoded vectors.
+    
+    Args:
+        indices (list): List of integer indices.
+        vocab_size (int): Size of the vocabulary.
+        
+    Returns:
+        A (number_of_indices x vocab_size) numpy array.
+    """
     one_hot = np.zeros((len(indices), vocab_size))
     for i, idx in enumerate(indices):
         one_hot[i, idx] = 1
     return one_hot
 
+# =============================================================================
+# STEP 5: Training Loop
+# -----------------------------------------------------------------------------
+# In this simplified training loop, we update the word embeddings and a projection
+# matrix that maps the attention outputs to vocabulary space. Note that in a real
+# GPT model, you would have additional layers (e.g., multi-head attention, feed-forward
+# layers, layer normalization, residual connections) and use an optimizer like Adam.
+# =============================================================================
 
-# Step 5: Training Loop
 learning_rate = 0.01
 epochs = 1000
 
-# Add a transformation matrix from embedding space to vocab space
-W_vocab = np.random.rand(embedding_dim, vocab_size) * 0.01  # (50, vocab_size)
+# Transformation matrix to map from embedding space to vocabulary scores.
+# This simulates the final linear layer in GPT that produces logits for each word.
+W_vocab = np.random.rand(embedding_dim, vocab_size) * 0.01
 
 for epoch in range(epochs):
     total_loss = 0
+    # Shuffle sentences to introduce randomness during training
     random.shuffle(sentences)
 
     for sentence in sentences:
+        # Tokenize the sentence: convert to lowercase and split into words
         words = sentence.lower().split()
+        # Convert words into their corresponding token indices
         token_ids = [word_to_index[word] for word in words]
 
-        # Extract embeddings & apply positional encoding
+        # Retrieve the embeddings for the tokens and add positional encoding
+        # (Only use as many positional encodings as there are tokens in the sentence)
         X = word_embeddings[token_ids] + pos_encodings[:len(token_ids)]
 
-        # Apply self-attention
-        Q, K, V = X, X, X  # GPT-style (Q=K=V)
+        # Apply self-attention (using Q = K = V in this simple example)
+        Q, K, V = X, X, X
         attention_output, attention_weights = scaled_dot_product_attention(Q, K, V)
 
-        # Project attention output to vocab space
-        logits = np.dot(attention_output, W_vocab)  # Shape (seq_len, vocab_size)
+        # Project the attention output into the vocabulary space to obtain logits
+        logits = np.dot(attention_output, W_vocab)  # Shape: (sequence_length, vocab_size)
 
-        # Compute softmax over the projected output
+        # Compute softmax probabilities from the logits
         softmax_output = np.exp(logits) / np.sum(np.exp(logits), axis=-1, keepdims=True)
 
-        # Convert original words to one-hot
-        y_true = one_hot_encoding(token_ids, vocab_size)  # Shape (seq_len, vocab_size)
+        # Create one-hot encoded labels for the true tokens
+        y_true = one_hot_encoding(token_ids, vocab_size)
 
-        # Compute cross-entropy loss
+        # Calculate the cross-entropy loss for the sentence
         loss = cross_entropy_loss(y_true, softmax_output)
         total_loss += loss
 
-        # Backpropagation (Gradient update)
-        gradients = softmax_output - y_true  # Shape (seq_len, vocab_size)
-        dW_vocab = np.dot(attention_output.T, gradients)  # Gradient for W_vocab
+        # ---------------- Backpropagation ----------------
+        # Compute the gradient of the loss with respect to the logits.
+        # For cross-entropy with softmax, this gradient is (softmax_output - y_true).
+        gradients = softmax_output - y_true
 
-        # Map gradient back to embedding space
-        grad_embedding = np.dot(gradients, W_vocab.T)  # Shape (seq_len, embedding_dim)
+        # Compute gradient for the projection matrix W_vocab
+        dW_vocab = np.dot(attention_output.T, gradients)
 
-        # Update embeddings
+        # Backpropagate the gradient to the attention output (and therefore to the embeddings)
+        grad_embedding = np.dot(gradients, W_vocab.T)
+
+        # Update each word's embedding using the computed gradient.
+        # Note: In a real model, gradients would be accumulated through all layers.
         for i, token_id in enumerate(token_ids):
-            word_embeddings[token_id] -= learning_rate * grad_embedding[i]  # Now correctly shaped
+            word_embeddings[token_id] -= learning_rate * grad_embedding[i]
 
-        # Update transformation matrix
+        # Update the transformation matrix that projects to vocab space.
         W_vocab -= learning_rate * dW_vocab
 
+    # Print the total loss every 100 epochs to monitor training progress.
     if epoch % 100 == 0:
         print(f"Epoch {epoch}, Loss: {total_loss:.4f}")
 
-# Step 6: Normalize Embeddings for Similarity Calculation
+# =============================================================================
+# STEP 6: Normalize the Word Embeddings
+# -----------------------------------------------------------------------------
+# Normalizing the embeddings allows us to compare them using cosine similarity.
+# =============================================================================
+
 word_embeddings = word_embeddings / np.linalg.norm(word_embeddings, axis=1, keepdims=True)
 
+# =============================================================================
+# STEP 7: Finding Similar Words
+# -----------------------------------------------------------------------------
+# This function calculates cosine similarity between the embedding of a given word
+# and all other word embeddings to find and return the top N most similar words.
+# =============================================================================
 
-# Step 7: Find Similar Words using Cosine Similarity
 def get_similar_words(word, top_n=5):
+    """
+    Retrieve words most similar to the given word based on cosine similarity.
+    
+    Args:
+        word (str): The input word.
+        top_n (int): Number of similar words to return.
+        
+    Returns:
+        List of words similar to the input word.
+    """
     if word not in word_to_index:
         return "Word not in vocabulary"
 
+    # Get the normalized embedding of the input word
     word_vec = word_embeddings[word_to_index[word]]
+    # Compute cosine similarities (dot product works because vectors are normalized)
     similarities = np.dot(word_embeddings, word_vec)
+    # Get indices of the most similar words (sorted in descending order)
     sorted_indices = np.argsort(-similarities)
 
     return [index_to_word[i] for i in sorted_indices[:top_n]]
 
+# =============================================================================
+# Interactive Loop for Testing the Model
+# -----------------------------------------------------------------------------
+# The loop below allows the user to input a word and see a list of similar words.
+# =============================================================================
 
 while True:
     user_input = input("Enter a word: ").lower()
