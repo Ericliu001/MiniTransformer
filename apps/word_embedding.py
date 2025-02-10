@@ -2,6 +2,18 @@ import numpy as np
 import random
 from collections import defaultdict
 
+# Summary
+# 	•	Tokenization & Embeddings:
+# The code converts words into indices and initializes small random embeddings.
+# 	•	Positional Encoding:
+# It adds sinusoidal positional encodings to the embeddings to incorporate word order.
+# 	•	Self-Attention:
+# A simplified scaled dot-product attention mechanism is implemented (with Q=K=V) to simulate how GPT models capture dependencies between words.
+# 	•	Training Loop:
+# A basic loop updates both the embeddings and a projection matrix by minimizing cross-entropy loss.
+# 	•	Cosine Similarity:
+# After training, embeddings are normalized so that similar words (based on cosine similarity) can be retrieved.
+
 # =============================================================================
 # STEP 0: Prepare a Sample Dataset
 # -----------------------------------------------------------------------------
