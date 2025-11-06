@@ -181,6 +181,33 @@ def scaled_dot_product_attention(
     Formula:
         Attention(Q, K, V) = softmax(Q @ K^T / sqrt(d_k)) @ V
 
+    REAL-LIFE ANALOGY - Library Search:
+        Imagine you're in a library searching for information:
+
+        - Query (Q): Your search question
+          Example: "What did God say when creating light?"
+
+        - Keys (K): Index cards on each book describing its content
+          Example: Book 1 has card "Genesis - Creation story"
+                   Book 2 has card "Exodus - Moses and Egypt"
+                   Book 3 has card "Psalms - Songs and prayers"
+
+        - Values (V): The actual books with full content
+          Example: Book 1 contains "And God said, Let there be light..."
+                   Book 2 contains "Moses led the people out of Egypt..."
+                   Book 3 contains "The Lord is my shepherd..."
+
+        The attention mechanism:
+        1. Compares your Query with all Keys (Q @ K^T) to find relevance scores
+           → Your question matches Book 1's index card most closely
+        2. Uses softmax to convert scores into probabilities (weights)
+           → Book 1 gets 80% attention, Book 2 gets 15%, Book 3 gets 5%
+        3. Retrieves a weighted combination of Values
+           → You get mostly content from Book 1, a bit from Books 2&3
+
+        This is exactly how the model decides which words to focus on when
+        predicting the next word!
+
     Where:
         - Q (Query): What we're looking for (seq_len, d_k)
         - K (Key): What we're matching against (seq_len, d_k)

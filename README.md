@@ -96,7 +96,7 @@ pip install numpy
 Train a model on your own text data:
 
 ```bash
-python train.py --data data/sample.txt --model_dir models/my_model --epochs 30
+python apps/train.py --data data/sample.txt --model_dir models/my_model --epochs 30
 ```
 
 #### Training Arguments
@@ -116,7 +116,7 @@ python train.py --data data/sample.txt --model_dir models/my_model --epochs 30
 #### Example with Custom Parameters
 
 ```bash
-python train.py \
+python apps/train.py \
     --data data/sample.txt \
     --model_dir models/large_model \
     --d_model 256 \
@@ -134,7 +134,7 @@ python train.py \
 Generate text from a single prompt:
 
 ```bash
-python generate.py --model_dir models/my_model --prompt "machine learning is"
+python apps/generate.py --model_dir models/my_model --prompt "machine learning is"
 ```
 
 #### Interactive Mode
@@ -142,7 +142,7 @@ python generate.py --model_dir models/my_model --prompt "machine learning is"
 Start an interactive session for continuous text generation:
 
 ```bash
-python generate.py --model_dir models/my_model --interactive
+python apps/generate.py --model_dir models/my_model --interactive
 ```
 
 #### Generation Arguments
@@ -160,48 +160,49 @@ python generate.py --model_dir models/my_model --interactive
 
 ```bash
 # Generate with higher temperature (more creative)
-python generate.py --model_dir models/my_model --prompt "the future of AI" --temperature 1.2
+python apps/generate.py --model_dir models/my_model --prompt "the future of AI" --temperature 1.2
 
 # Generate more tokens
-python generate.py --model_dir models/my_model --prompt "attention mechanism" --max_new_tokens 100
+python apps/generate.py --model_dir models/my_model --prompt "attention mechanism" --max_new_tokens 100
 
 # Quiet mode (just output the text)
-python generate.py --model_dir models/my_model --prompt "deep learning" --quiet
+python apps/generate.py --model_dir models/my_model --prompt "deep learning" --quiet
 ```
 
 ## Project Structure
 
 ```
 MiniTransformer/
-├── mini_gpt.py           # Core model implementation
-│   ├── MiniGPT class
-│   ├── MultiHeadAttention
-│   ├── PositionWiseFeedForward
-│   ├── TransformerBlock
-│   └── Helper functions (softmax, layer_norm, etc.)
+├── apps/                    # Main application code
+│   ├── mini_gpt.py          # Core model implementation
+│   │   ├── MiniGPT class
+│   │   ├── MultiHeadAttention
+│   │   ├── PositionWiseFeedForward
+│   │   ├── TransformerBlock
+│   │   └── Helper functions (softmax, layer_norm, etc.)
+│   │
+│   ├── data_utils.py        # Data loading and preprocessing
+│   │   ├── Tokenizer class
+│   │   ├── Data loading functions
+│   │   └── Statistics utilities
+│   │
+│   ├── train.py             # Training script
+│   ├── generate.py          # Text generation script
+│   │
+│   └── legacy/              # Legacy educational examples
+│       ├── self_attention.py
+│       ├── position_encoding.py
+│       ├── mini_transformer.py
+│       └── word_embedding.py
 │
-├── data_utils.py         # Data loading and preprocessing
-│   ├── Tokenizer class
-│   ├── Data loading functions
-│   └── Statistics utilities
+├── data/                    # Training data directory
+│   └── sample.txt           # Sample training data (Bible text)
 │
-├── train.py              # Training script
-├── generate.py           # Text generation script
-│
-├── data/                 # Training data directory
-│   └── sample.txt        # Sample training data
-│
-├── models/               # Saved models (created during training)
+├── models/                  # Saved models (created during training)
 │   └── [model_name]/
 │       ├── model.pkl
 │       ├── tokenizer.pkl
 │       └── config.txt
-│
-├── apps/                 # Legacy educational examples
-│   ├── self_attention.py
-│   ├── position_encoding.py
-│   ├── mini_transformer.py
-│   └── word_embedding.py
 │
 └── README.md
 ```
@@ -271,14 +272,15 @@ For production use cases, consider:
 
 ## Examples
 
-### Example 1: Quick Start
+### Example 1: Quick Start with Bible Text
 
 ```bash
-# Train on sample data
-python train.py --data data/sample.txt --model_dir models/sample --epochs 20
+# Train on Bible text (included in data/sample.txt)
+python apps/train.py --data data/sample.txt --model_dir models/bible_model --epochs 20
 
-# Generate text
-python generate.py --model_dir models/sample --prompt "machine learning"
+# Generate text with Biblical prompts
+python apps/generate.py --model_dir models/bible_model --prompt "In the beginning"
+python apps/generate.py --model_dir models/bible_model --prompt "And God said"
 ```
 
 ### Example 2: Custom Dataset
@@ -286,7 +288,7 @@ python generate.py --model_dir models/sample --prompt "machine learning"
 ```bash
 # Create your own text file: my_data.txt
 # Train with more layers and heads
-python train.py \
+python apps/train.py \
     --data my_data.txt \
     --model_dir models/custom \
     --d_model 256 \
@@ -295,21 +297,21 @@ python train.py \
     --epochs 30
 
 # Generate interactively
-python generate.py --model_dir models/custom --interactive
+python apps/generate.py --model_dir models/custom --interactive
 ```
 
 ### Example 3: Character-Level Model
 
 ```bash
 # Train character-level model (better for small datasets)
-python train.py \
+python apps/train.py \
     --data data/sample.txt \
     --model_dir models/char_model \
     --tokenization char \
     --epochs 50
 
 # Generate
-python generate.py --model_dir models/char_model --prompt "the" --max_new_tokens 200
+python apps/generate.py --model_dir models/char_model --prompt "the" --max_new_tokens 200
 ```
 
 ## References
