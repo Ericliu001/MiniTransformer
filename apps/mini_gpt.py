@@ -7,9 +7,19 @@ with detailed comments explaining each component and its purpose.
 Architecture Overview:
 - Decoder-only architecture (GPT-style) for autoregressive text generation
 - Multi-head self-attention mechanism
-- Position-wise feed-forward networks
+- Position-wise feed-forward networks with ReLU activation (Section 3.3)
 - Layer normalization and residual connections
-- Positional encoding for sequence order information
+- Sinusoidal positional encoding for sequence order information (Section 3.5)
+- Dropout regularization with Pdrop = 0.1 (Section 5.4)
+
+Key Implementation Details Matching the Paper:
+- Scaled dot-product attention: Attention(Q,K,V) = softmax(QK^T / sqrt(d_k))V
+- ReLU activation in feed-forward networks (not GELU)
+- Dropout applied to:
+  * Output of each sub-layer before residual addition
+  * Sum of embeddings and positional encoding
+  * Attention weights
+- Post-layer normalization (LayerNorm after residual connection)
 
 References:
     Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., ... &
@@ -71,22 +81,50 @@ def layer_norm(x: np.ndarray, gamma: np.ndarray, beta: np.ndarray, eps: float = 
     return gamma * x_normalized + beta
 
 
-def gelu(x: np.ndarray) -> np.ndarray:
+def relu(x: np.ndarray) -> np.ndarray:
     """
-    Gaussian Error Linear Unit (GELU) activation function.
+    Rectified Linear Unit (ReLU) activation function.
 
-    GELU is a smooth approximation to ReLU and is commonly used in transformer models.
-    It weights inputs by their value rather than gates them by their sign.
+    ReLU is the activation function used in the original "Attention Is All You Need" paper (Section 3.3).
+    It zeros out negative values and passes positive values unchanged.
 
-    Approximation: GELU(x) ≈ 0.5 * x * (1 + tanh(sqrt(2/π) * (x + 0.044715 * x^3)))
+    Formula: ReLU(x) = max(0, x)
 
     Args:
         x: Input array
 
     Returns:
-        Array of same shape with GELU activation applied
+        Array of same shape with ReLU activation applied
     """
-    return 0.5 * x * (1.0 + np.tanh(np.sqrt(2.0 / np.pi) * (x + 0.044715 * x**3)))
+    return np.maximum(0, x)
+
+
+def dropout(x: np.ndarray, drop_rate: float, training: bool = True) -> np.ndarray:
+    """
+    Apply dropout regularization as described in the paper (Section 5.4).
+
+    Dropout randomly zeros out elements during training to prevent overfitting.
+    During inference, all elements are kept and scaled by (1 - drop_rate).
+
+    The paper uses Pdrop = 0.1 for the base model.
+
+    Args:
+        x: Input array
+        drop_rate: Probability of dropping each element (0.1 in the paper)
+        training: Whether in training mode (apply dropout) or inference mode
+
+    Returns:
+        Array of same shape with dropout applied
+    """
+    if not training or drop_rate == 0.0:
+        return x
+
+    # Create dropout mask: randomly zero out elements with probability drop_rate
+    keep_prob = 1.0 - drop_rate
+    mask = np.random.binomial(1, keep_prob, size=x.shape)
+
+    # Scale by 1/keep_prob to maintain expected value (inverted dropout)
+    return (x * mask) / keep_prob
 
 
 def create_causal_mask(seq_length: int) -> np.ndarray:
@@ -280,18 +318,20 @@ class MultiHeadAttention:
     Paper uses: d_model=512, num_heads=8, giving d_k=d_v=64 per head
     """
 
-    def __init__(self, d_model: int, num_heads: int):
+    def __init__(self, d_model: int, num_heads: int, dropout_rate: float = 0.1):
         """
         Initialize multi-head attention weights.
 
         Args:
             d_model: Model dimension (must be divisible by num_heads)
             num_heads: Number of parallel attention heads
+            dropout_rate: Dropout probability (paper uses 0.1)
         """
         assert d_model % num_heads == 0, "d_model must be divisible by num_heads"
 
         self.d_model = d_model
         self.num_heads = num_heads
+        self.dropout_rate = dropout_rate
 
         # Dimension of each attention head
         # Paper uses d_model=512, num_heads=8, so d_k=d_v=64
@@ -337,13 +377,14 @@ class MultiHeadAttention:
         # Reshape to (seq_len, d_model) where d_model = num_heads * d_k
         return x.reshape(seq_len, self.d_model)
 
-    def forward(self, x: np.ndarray, mask: Optional[np.ndarray] = None) -> np.ndarray:
+    def forward(self, x: np.ndarray, mask: Optional[np.ndarray] = None, training: bool = False) -> np.ndarray:
         """
         Forward pass through multi-head attention.
 
         Args:
             x: Input tensor of shape (seq_len, d_model)
             mask: Optional causal mask of shape (seq_len, seq_len)
+            training: Whether in training mode (apply dropout)
 
         Returns:
             Output tensor of shape (seq_len, d_model)
@@ -366,7 +407,11 @@ class MultiHeadAttention:
         # Shape: (num_heads, seq_len, d_k)
         attention_outputs = []
         for i in range(self.num_heads):
-            output, _ = scaled_dot_product_attention(Q[i], K[i], V[i], mask)
+            output, attn_weights = scaled_dot_product_attention(Q[i], K[i], V[i], mask)
+            # Apply dropout to attention weights (Section 5.4)
+            attn_weights = dropout(attn_weights, self.dropout_rate, training)
+            # Re-apply attention with dropped weights
+            output = np.matmul(attn_weights, V[i])
             attention_outputs.append(output)
 
         # Stack attention outputs
@@ -394,10 +439,10 @@ class PositionWiseFeedForward:
 
     In addition to attention sub-layers, each layer contains a fully connected
     feed-forward network, which is applied to each position separately and identically.
-    This consists of two linear transformations with a GELU activation in between.
+    This consists of two linear transformations with a ReLU activation in between.
 
     Formula:
-        FFN(x) = GELU(x @ W1 + b1) @ W2 + b2
+        FFN(x) = max(0, x @ W1 + b1) @ W2 + b2
 
     The paper uses:
         - d_model = 512 (input/output dimension)
@@ -436,9 +481,9 @@ class PositionWiseFeedForward:
         Returns:
             Output tensor of shape (seq_len, d_model)
         """
-        # First linear transformation + GELU activation
+        # First linear transformation + ReLU activation
         # Shape: (seq_len, d_model) @ (d_model, d_ff) = (seq_len, d_ff)
-        hidden = gelu(np.matmul(x, self.W1) + self.b1)
+        hidden = relu(np.matmul(x, self.W1) + self.b1)
 
         # Second linear transformation
         # Shape: (seq_len, d_ff) @ (d_ff, d_model) = (seq_len, d_model)
@@ -467,7 +512,7 @@ class TransformerBlock:
         x = LayerNorm(x + FeedForward(x))
     """
 
-    def __init__(self, d_model: int, num_heads: int, d_ff: int):
+    def __init__(self, d_model: int, num_heads: int, d_ff: int, dropout_rate: float = 0.1):
         """
         Initialize transformer block.
 
@@ -475,8 +520,10 @@ class TransformerBlock:
             d_model: Model dimension
             num_heads: Number of attention heads
             d_ff: Feed-forward network inner dimension
+            dropout_rate: Dropout probability (paper uses 0.1)
         """
-        self.attention = MultiHeadAttention(d_model, num_heads)
+        self.dropout_rate = dropout_rate
+        self.attention = MultiHeadAttention(d_model, num_heads, dropout_rate)
         self.feed_forward = PositionWiseFeedForward(d_model, d_ff)
 
         # Layer normalization parameters
@@ -485,24 +532,27 @@ class TransformerBlock:
         self.gamma2 = np.ones(d_model)
         self.beta2 = np.zeros(d_model)
 
-    def forward(self, x: np.ndarray, mask: Optional[np.ndarray] = None) -> np.ndarray:
+    def forward(self, x: np.ndarray, mask: Optional[np.ndarray] = None, training: bool = False) -> np.ndarray:
         """
         Forward pass through transformer block.
 
         Args:
             x: Input tensor of shape (seq_len, d_model)
             mask: Optional causal mask
+            training: Whether in training mode (apply dropout)
 
         Returns:
             Output tensor of shape (seq_len, d_model)
         """
-        # Multi-head self-attention with residual connection
-        attn_output = self.attention.forward(x, mask)
+        # Multi-head self-attention with dropout and residual connection
+        attn_output = self.attention.forward(x, mask, training)
+        attn_output = dropout(attn_output, self.dropout_rate, training)  # Dropout before residual
         x = x + attn_output  # Residual connection
         x = layer_norm(x, self.gamma1, self.beta1)  # Layer normalization
 
-        # Position-wise feed-forward with residual connection
+        # Position-wise feed-forward with dropout and residual connection
         ff_output = self.feed_forward.forward(x)
+        ff_output = dropout(ff_output, self.dropout_rate, training)  # Dropout before residual
         x = x + ff_output  # Residual connection
         x = layer_norm(x, self.gamma2, self.beta2)  # Layer normalization
 
@@ -537,6 +587,7 @@ class MiniGPT:
         num_layers: int = 4,
         d_ff: int = 512,
         max_seq_length: int = 512,
+        dropout_rate: float = 0.1,
         learning_rate: float = 0.001
     ):
         """
@@ -549,6 +600,7 @@ class MiniGPT:
             num_layers: Number of transformer blocks
             d_ff: Dimension of feed-forward network
             max_seq_length: Maximum sequence length
+            dropout_rate: Dropout probability (paper uses 0.1)
             learning_rate: Learning rate for training
         """
         self.vocab_size = vocab_size
@@ -557,6 +609,7 @@ class MiniGPT:
         self.num_layers = num_layers
         self.d_ff = d_ff
         self.max_seq_length = max_seq_length
+        self.dropout_rate = dropout_rate
         self.learning_rate = learning_rate
 
         # Token embedding matrix: maps token IDs to vectors
@@ -569,7 +622,7 @@ class MiniGPT:
 
         # Stack of transformer blocks
         self.blocks = [
-            TransformerBlock(d_model, num_heads, d_ff)
+            TransformerBlock(d_model, num_heads, d_ff, dropout_rate)
             for _ in range(num_layers)
         ]
 
@@ -581,12 +634,13 @@ class MiniGPT:
         # Shape: (d_model, vocab_size)
         self.output_projection = np.random.randn(d_model, vocab_size) * np.sqrt(1.0 / d_model)
 
-    def forward(self, token_ids: np.ndarray) -> np.ndarray:
+    def forward(self, token_ids: np.ndarray, training: bool = False) -> np.ndarray:
         """
         Forward pass through the model.
 
         Args:
             token_ids: Array of token IDs of shape (seq_len,)
+            training: Whether in training mode (apply dropout)
 
         Returns:
             Logits for next token prediction of shape (seq_len, vocab_size)
@@ -601,12 +655,15 @@ class MiniGPT:
         # The paper adds positional encodings to the embeddings
         x = x + self.positional_encoding[:seq_len]
 
+        # Apply dropout to the sum of embeddings and positional encoding (Section 5.4)
+        x = dropout(x, self.dropout_rate, training)
+
         # Create causal mask for autoregressive generation
         mask = create_causal_mask(seq_len)
 
         # Pass through transformer blocks
         for block in self.blocks:
-            x = block.forward(x, mask)
+            x = block.forward(x, mask, training)
 
         # Final layer normalization
         x = layer_norm(x, self.final_gamma, self.final_beta)
@@ -661,8 +718,8 @@ class MiniGPT:
         input_ids = token_ids[:-1]
         target_ids = token_ids[1:]
 
-        # Forward pass
-        logits = self.forward(input_ids)
+        # Forward pass with training=True to apply dropout
+        logits = self.forward(input_ids, training=True)
 
         # Compute loss
         loss = self.compute_loss(logits, target_ids)
@@ -761,6 +818,7 @@ class MiniGPT:
             'num_layers': self.num_layers,
             'd_ff': self.d_ff,
             'max_seq_length': self.max_seq_length,
+            'dropout_rate': self.dropout_rate,
             'learning_rate': self.learning_rate,
             'token_embeddings': self.token_embeddings,
             'output_projection': self.output_projection,
@@ -788,6 +846,7 @@ class MiniGPT:
             model_data = pickle.load(f)
 
         # Create model with saved hyperparameters
+        # Use default dropout_rate if not in saved model (backwards compatibility)
         model = cls(
             vocab_size=model_data['vocab_size'],
             d_model=model_data['d_model'],
@@ -795,6 +854,7 @@ class MiniGPT:
             num_layers=model_data['num_layers'],
             d_ff=model_data['d_ff'],
             max_seq_length=model_data['max_seq_length'],
+            dropout_rate=model_data.get('dropout_rate', 0.1),
             learning_rate=model_data['learning_rate']
         )
 
@@ -822,10 +882,12 @@ if __name__ == "__main__":
     print("This module contains the core Mini-GPT implementation.")
     print("Use train.py to train a model and generate.py to generate text.")
     print()
-    print("Key components:")
+    print("Key components (matching the 2017 paper exactly):")
     print("  - Scaled Dot-Product Attention")
     print("  - Multi-Head Attention")
-    print("  - Position-wise Feed-Forward Networks")
-    print("  - Positional Encoding")
+    print("  - Position-wise Feed-Forward Networks with ReLU activation")
+    print("  - Sinusoidal Positional Encoding")
+    print("  - Dropout Regularization (Pdrop = 0.1)")
+    print("  - Layer Normalization and Residual Connections")
     print("  - Transformer Decoder Blocks")
     print("  - Autoregressive Text Generation")
