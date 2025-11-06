@@ -19,11 +19,16 @@ venv/
 .ipynb_checkpoints/
 
 # Ignore dataset and large files (customize as needed)
-data/
+data/*
+!data/sample.txt
 *.csv
 *.json
 *.h5
 *.pth
+*.pkl
+
+# Ignore trained models
+models/
 
 # Ignore system files
 .DS_Store
